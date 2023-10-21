@@ -224,32 +224,22 @@ class ScUpdatesView(Gtk.VBox):
         self.tview.set_activate_on_single_click(True)
         self.tview.connect_after('row-activated', self.on_row_activated)
 
-        # Can toggle?
-        ren = Gtk.CellRendererToggle()
-        ren.set_activatable(True)
-        ren.connect('toggled', self.on_toggled)
-        ren.set_padding(5, 5)
-        ren.set_property("xalign", 1.0)
-        column = Gtk.TreeViewColumn("Install?", ren, active=0,
-                                    activatable=1, sensitive=5)
-        self.tview.append_column(column)
-
         ren = Gtk.CellRendererPixbuf()
         ren.set_padding(5, 5)
-        column = Gtk.TreeViewColumn("Type", ren, pixbuf=4, sensitive=5)
+        column = Gtk.TreeViewColumn("Type", ren, pixbuf=2, sensitive=3)
         self.tview.append_column(column)
         ren.set_property("stock-size", Gtk.IconSize.DIALOG)
 
         # Label of top row
         text_ren = Gtk.CellRendererText()
-        column = Gtk.TreeViewColumn("Label", text_ren, markup=2, sensitive=5)
+        column = Gtk.TreeViewColumn("Label", text_ren, markup=0, sensitive=3)
         text_ren.set_padding(5, 5)
         self.tview.append_column(column)
 
         # Update size
         text_ren = Gtk.CellRendererText()
         text_ren.set_property("xalign", 1.0)
-        column = Gtk.TreeViewColumn("Size", text_ren, text=3, sensitive=5)
+        column = Gtk.TreeViewColumn("Size", text_ren, text=1, sensitive=3)
         self.tview.append_column(column)
 
         # Main toolbar
@@ -299,8 +289,8 @@ class ScUpdatesView(Gtk.VBox):
         self.toolbar.add(self.view_details)
 
         # Apply the updates
-        self.update_btn = Gtk.ToolButton(None, _("Update Selected"))
-        self.update_btn.set_label(_("Update Selected"))
+        self.update_btn = Gtk.ToolButton(None, _("Install Updates"))
+        self.update_btn.set_label(_("Install Updates"))
         self.update_btn.set_is_important(True)
         self.update_btn.connect("clicked", self.on_update)
         self.toolbar.add(self.update_btn)
@@ -325,10 +315,7 @@ class ScUpdatesView(Gtk.VBox):
         # root row can be skipped in each instance
         for row in model:
             for sprog in row.iterchildren():
-                checked = sprog[0]
                 obj = sprog[-1]
-                if not checked:
-                    continue
                 self.basket.update_package(obj.old_pkg, obj.new_pkg)
         # Move to the updating page
         self.stack.set_visible_child_name("updating")
@@ -343,22 +330,16 @@ class ScUpdatesView(Gtk.VBox):
         dialog.run()
         dialog.destroy()
 
-    def on_toggled(self, w, path):
-        model = self.tview.get_model()
-        model[path][0] = not model[path][0]
-
     def init_view(self):
-        # Install? Modifiable? Display label | Size | Image | Sensitive | iSize
-        # | UpdateObject
-        model = Gtk.TreeStore(bool, bool, str, str, GdkPixbuf.Pixbuf,
+        # Display label | Size | Image | Sensitive | iSize | UpdateObject
+        model = Gtk.TreeStore(str, str, GdkPixbuf.Pixbuf,
                               bool, int, ScUpdateObject)
         self.selected_object = None
 
         # Mandatory updates
         m_label = "<big><b>Available Updates</b></big>\n" \
-                  "These updates are mandatory and will be selected " \
-                  "automatically."
-        row_m = model.append(None, [True, False, m_label, None,
+                  "Required updates for your system."
+        row_m = model.append(None, [m_label, None,
                                     self.appsystem.mandatory_pixbuf,
                                     True, 0, None])
 
@@ -392,11 +373,8 @@ class ScUpdatesView(Gtk.VBox):
                                      str(new_pkg.release))
             pkg_name = str(new_pkg.name)
             old_pkg = None
-            systemBase = False
 
             icon = PACKAGE_ICON_NORMAL
-            if new_pkg.partOf == "system.base":
-                systemBase = True
 
             if self.installdb.has_package(item):
                 old_pkg = self.installdb.get_package(item)
@@ -404,7 +382,7 @@ class ScUpdatesView(Gtk.VBox):
             sc_obj = ScUpdateObject(old_pkg, new_pkg)
 
             summary = str(new_pkg.summary)
-            if len(summary) > 76:
+            if len(summary) > 79:
                 summary = "%s…" % summary[0:76]
 
             # Finally, actual size, and readable size
@@ -425,8 +403,7 @@ class ScUpdatesView(Gtk.VBox):
                                                       new_version,
                                                       summary)
 
-            model.append(row_m, [True, False,
-                                 p_print, dlSize, icon, True, pkgSize,
+            model.append(row_m, [p_print, dlSize, icon, True, pkgSize,
                                  sc_obj])
 
         # Disable empty rows
@@ -472,11 +449,6 @@ class ScUpdatesView(Gtk.VBox):
                     inactive_children.append(child_path)
 
             ppath = tmodel.get_path(parent)
-            # One inactive means parent = FALSE, all active = TRUE
-            if len(inactive_children) > 0:
-                tmodel[ppath][0] = False
-            else:
-                tmodel[ppath][0] = True
         else:
             # Handle parent set children
             num_children = tmodel.iter_n_children(titer)
@@ -484,8 +456,6 @@ class ScUpdatesView(Gtk.VBox):
             for i in xrange(0, num_children):
                 child = tmodel.iter_nth_child(titer, i)
                 child_path = tmodel.get_path(child)
-
-                tmodel[child_path][0] = active
 
         self.should_ignore = False
 
@@ -510,23 +480,19 @@ class ScUpdatesView(Gtk.VBox):
 
                 total_available += 1
 
-                active = model[child_path][0]
-                if not active:
-                    continue
                 total_update += 1
-                total_size += model[child_path][6]
+                total_size += model[child_path][4]
         # Skip it.
         if total_update == 0:
             # "2 of 10 updates selected"
-            st = _("{} of {} updates selected")
-            self.selection_label.set_text(st.format(
-                total_update, total_available))
+            st = _("{} updates will be installed")
+            self.selection_label.set_text(st.format(total_available))
             self.update_btn.set_sensitive(False)
             return
         dlSize = sc_format_size_local(total_size, True)
         # "2 of 10 updates selected (20.05MB to download)"
-        newLabel = _("{} of {} updates selected ({} to download)").format(
-                   total_update, total_available, dlSize)
+        newLabel = _("{} updates will be installed ({} to download)").format(
+                   total_available, dlSize)
         self.update_btn.set_sensitive(True)
         self.selection_label.set_text(newLabel)
 
@@ -542,4 +508,4 @@ class ScUpdatesView(Gtk.VBox):
             self.selected_object = None
             return
         self.view_details.set_sensitive(True)
-        self.selected_object = model[path][7]
+        self.selected_object = model[path][5]
